@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,42 +15,152 @@
  */
 package io.jboot.core.cache.ehcache;
 
-import com.jfinal.plugin.ehcache.CacheKit;
+import com.jfinal.kit.PathKit;
+import com.jfinal.log.Log;
 import com.jfinal.plugin.ehcache.IDataLoader;
+import io.jboot.Jboot;
 import io.jboot.core.cache.JbootCacheBase;
+import io.jboot.utils.StringUtils;
+import net.sf.ehcache.Cache;
+import net.sf.ehcache.CacheManager;
+import net.sf.ehcache.Element;
+import net.sf.ehcache.event.CacheEventListener;
 
 import java.util.List;
 
 
 public class JbootEhcacheImpl extends JbootCacheBase {
 
+    private CacheManager cacheManager;
+    private static Object locker = new Object();
+
+    private static final Log log = Log.getLog(JbootEhcacheImpl.class);
+
+    private CacheEventListener cacheEventListener;
+
+    public JbootEhcacheImpl() {
+        JbootEhCacheConfig config = Jboot.config(JbootEhCacheConfig.class);
+        if (StringUtils.isBlank(config.getConfigFileName())) {
+            cacheManager = CacheManager.create();
+        } else {
+            String configPath = config.getConfigFileName();
+            if (!configPath.startsWith("/")){
+                configPath = PathKit.getRootClassPath()+"/"+configPath;
+            }
+            cacheManager = CacheManager.create(configPath);
+        }
+    }
+
+    public JbootEhcacheImpl(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
+    }
+
+    public CacheEventListener getCacheEventListener() {
+        return cacheEventListener;
+    }
+
+    public void setCacheEventListener(CacheEventListener cacheEventListener) {
+        this.cacheEventListener = cacheEventListener;
+    }
+
+    public Cache getOrAddCache(String cacheName) {
+        Cache cache = cacheManager.getCache(cacheName);
+        if (cache == null) {
+            synchronized (locker) {
+                cache = cacheManager.getCache(cacheName);
+                if (cache == null) {
+                    log.warn("Could not find cache config [" + cacheName + "], using default.");
+                    cacheManager.addCacheIfAbsent(cacheName);
+                    cache = cacheManager.getCache(cacheName);
+                    if (cacheEventListener != null) {
+                        cache.getCacheEventNotificationService().registerListener(cacheEventListener);
+                    }
+                }
+            }
+        }
+        return cache;
+    }
+
     @Override
     public List getKeys(String cacheName) {
-        return CacheKit.getKeys(cacheName);
+        return getOrAddCache(cacheName).getKeys();
     }
 
     @Override
     public <T> T get(String cacheName, Object key) {
-        return CacheKit.get(cacheName, key);
+        Element element = getOrAddCache(cacheName).get(key);
+        return element != null ? (T) element.getObjectValue() : null;
     }
 
     @Override
     public void put(String cacheName, Object key, Object value) {
-        CacheKit.put(cacheName, key, value);
+        getOrAddCache(cacheName).put(new Element(key, value));
+    }
+
+    @Override
+    public void put(String cacheName, Object key, Object value, int liveSeconds) {
+        if (liveSeconds <= 0) {
+            put(cacheName, key, value);
+            return;
+        }
+        Element element = new Element(key, value);
+        element.setTimeToLive(liveSeconds);
+        getOrAddCache(cacheName).put(element);
     }
 
     @Override
     public void remove(String cacheName, Object key) {
-        CacheKit.remove(cacheName, key);
+        getOrAddCache(cacheName).remove(key);
     }
 
     @Override
     public void removeAll(String cacheName) {
-        CacheKit.removeAll(cacheName);
+        getOrAddCache(cacheName).removeAll();
     }
 
     @Override
     public <T> T get(String cacheName, Object key, IDataLoader dataLoader) {
-        return CacheKit.get(cacheName, key, dataLoader);
+        Object data = get(cacheName, key);
+        if (data == null) {
+            data = dataLoader.load();
+            put(cacheName, key, data);
+        }
+        return (T) data;
     }
+
+    @Override
+    public <T> T get(String cacheName, Object key, IDataLoader dataLoader, int liveSeconds) {
+        if (liveSeconds <= 0) {
+            return get(cacheName, key, dataLoader);
+        }
+        Object data = get(cacheName, key);
+        if (data == null) {
+            data = dataLoader.load();
+            put(cacheName, key, data, liveSeconds);
+        }
+        return (T) data;
+    }
+
+    @Override
+    public Integer getTtl(String cacheName, Object key) {
+        Element element = getOrAddCache(cacheName).get(key);
+        return element != null ? element.getTimeToLive() : null;
+    }
+
+
+    @Override
+    public void setTtl(String cacheName, Object key, int seconds) {
+        Element element = getOrAddCache(cacheName).get(key);
+        if (element == null) {
+            return;
+        }
+
+        element.setTimeToLive(seconds);
+        getOrAddCache(cacheName).put(element);
+    }
+
+    public CacheManager getCacheManager() {
+        return cacheManager;
+    }
+
 }

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,126 +15,260 @@
  */
 package io.jboot.core.cache.ehredis;
 
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.jfinal.plugin.ehcache.IDataLoader;
 import io.jboot.Jboot;
+import io.jboot.component.redis.JbootRedis;
 import io.jboot.core.cache.JbootCacheBase;
 import io.jboot.core.cache.ehcache.JbootEhcacheImpl;
 import io.jboot.core.cache.redis.JbootRedisCacheImpl;
-import io.jboot.core.mq.JbootmqMessageListener;
+import io.jboot.core.serializer.ISerializer;
 import io.jboot.utils.StringUtils;
+import net.sf.ehcache.CacheException;
+import net.sf.ehcache.Ehcache;
+import net.sf.ehcache.Element;
+import net.sf.ehcache.event.CacheEventListener;
+import redis.clients.jedis.BinaryJedisPubSub;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 基于 ehcache和redis做的二级缓存
  * 优点是：减少高并发下redis的io瓶颈
  */
-public class JbootEhredisCacheImpl extends JbootCacheBase implements JbootmqMessageListener {
+public class JbootEhredisCacheImpl extends JbootCacheBase implements CacheEventListener{
 
     public static final String DEFAULT_NOTIFY_CHANNEL = "jboot_ehredis_channel";
 
-    JbootEhcacheImpl ehcache;
-    JbootRedisCacheImpl redisCache;
+    private JbootEhcacheImpl ehcacheImpl;
+    private JbootRedisCacheImpl redisCacheImpl;
+    private JbootRedis redis;
+    private ISerializer serializer;
 
     private String channel = DEFAULT_NOTIFY_CHANNEL;
-    private String uuid;
+    private String clientId;
+
+    private LoadingCache<String, List> keysCache = Caffeine.newBuilder()
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .expireAfterWrite(10, TimeUnit.MINUTES)
+            .build(key -> null);
 
 
     public JbootEhredisCacheImpl() {
-        ehcache = new JbootEhcacheImpl();
-        redisCache = new JbootRedisCacheImpl();
+        this.ehcacheImpl = new JbootEhcacheImpl();
+        this.ehcacheImpl.setCacheEventListener(this);
 
-        Jboot.getMq().addMessageListener(this, channel);
-        uuid = StringUtils.uuid();
+        this.redisCacheImpl = new JbootRedisCacheImpl();
+        this.clientId = StringUtils.uuid();
+        this.serializer = Jboot.me().getSerializer();
+
+        this.redis = redisCacheImpl.getRedis();
+        this.redis.subscribe(new BinaryJedisPubSub() {
+            @Override
+            public void onMessage(byte[] channel, byte[] message) {
+                JbootEhredisCacheImpl.this.onMessage((String) serializer.deserialize(channel), serializer.deserialize(message));
+            }
+        }, serializer.serialize(channel));
     }
 
 
     @Override
     public List getKeys(String cacheName) {
-        List list = ehcache.getKeys(cacheName);
+        List list = keysCache.getIfPresent(cacheName);
         if (list == null) {
-            list = redisCache.getKeys(cacheName);
+            list = redisCacheImpl.getKeys(cacheName);
+            if (list  == null) {
+                list = new ArrayList();
+            }
+            keysCache.put(cacheName,list);
         }
         return list;
     }
 
     @Override
     public <T> T get(String cacheName, Object key) {
-        T obj = ehcache.get(cacheName, key);
-        if (obj == null) {
-            obj = redisCache.get(cacheName, key);
+        T value = ehcacheImpl.get(cacheName, key);
+        if (value == null) {
+            value = redisCacheImpl.get(cacheName, key);
+            if (value != null) {
+                Integer ttl = redisCacheImpl.getTtl(cacheName, key);
+                if (ttl != null && ttl > 0) {
+                    ehcacheImpl.put(cacheName, key, value, ttl);
+                } else {
+                    ehcacheImpl.put(cacheName, key, value);
+                }
+            }
         }
-        return obj;
+        return value;
     }
 
     @Override
     public void put(String cacheName, Object key, Object value) {
         try {
-            ehcache.put(cacheName, key, value);
-            redisCache.put(cacheName, key, value);
+            ehcacheImpl.put(cacheName, key, value);
+            redisCacheImpl.put(cacheName, key, value);
         } finally {
-            Jboot.getMq().publish(new JbootEhredisMessage(uuid, JbootEhredisMessage.ACTION_PUT, cacheName, key), channel);
+            publishMessage(JbootEhredisMessage.ACTION_PUT, cacheName, key);
+        }
+    }
+
+
+    @Override
+    public void put(String cacheName, Object key, Object value, int liveSeconds) {
+        if (liveSeconds <= 0) {
+            put(cacheName, key, value);
+            return;
+        }
+        try {
+            ehcacheImpl.put(cacheName, key, value, liveSeconds);
+            redisCacheImpl.put(cacheName, key, value, liveSeconds);
+        } finally {
+            publishMessage(JbootEhredisMessage.ACTION_PUT, cacheName, key);
         }
     }
 
     @Override
     public void remove(String cacheName, Object key) {
         try {
-            ehcache.remove(cacheName, key);
-            redisCache.remove(cacheName, key);
+            ehcacheImpl.remove(cacheName, key);
+            redisCacheImpl.remove(cacheName, key);
         } finally {
-            Jboot.getMq().publish(new JbootEhredisMessage(uuid, JbootEhredisMessage.ACTION_REMOVE, cacheName, key), channel);
+            publishMessage(JbootEhredisMessage.ACTION_REMOVE, cacheName, key);
         }
     }
 
     @Override
     public void removeAll(String cacheName) {
         try {
-            ehcache.removeAll(cacheName);
-            redisCache.removeAll(cacheName);
+            ehcacheImpl.removeAll(cacheName);
+            redisCacheImpl.removeAll(cacheName);
         } finally {
-            Jboot.getMq().publish(new JbootEhredisMessage(uuid, JbootEhredisMessage.ACTION_REMOVE_ALL, cacheName, null), channel);
+            publishMessage(JbootEhredisMessage.ACTION_REMOVE_ALL, cacheName, null);
         }
     }
 
     @Override
     public <T> T get(String cacheName, Object key, IDataLoader dataLoader) {
-        T obj = get(cacheName, key);
-        if (obj != null) {
-            return obj;
+        T value = get(cacheName, key);
+        if (value != null) {
+            return value;
         }
 
-        obj = (T) dataLoader.load();
-        if (obj != null) {
-            put(cacheName, key, obj);
+        value = (T) dataLoader.load();
+        if (value != null) {
+            put(cacheName, key, value);
         }
-        return obj;
+        return value;
+    }
+
+    @Override
+    public <T> T get(String cacheName, Object key, IDataLoader dataLoader, int liveSeconds) {
+        if (liveSeconds <= 0) {
+            return get(cacheName, key, dataLoader);
+        }
+
+        T value = get(cacheName, key);
+        if (value != null) {
+            return value;
+        }
+
+        value = (T) dataLoader.load();
+        if (value != null) {
+            put(cacheName, key, value, liveSeconds);
+        }
+        return value;
+    }
+
+    @Override
+    public Integer getTtl(String cacheName, Object key) {
+        Integer ttl = ehcacheImpl.getTtl(cacheName, key);
+        if (ttl == null) {
+            ttl = redisCacheImpl.getTtl(cacheName, key);
+        }
+        return ttl;
     }
 
 
     @Override
+    public void setTtl(String cacheName, Object key, int seconds) {
+        ehcacheImpl.setTtl(cacheName, key, seconds);
+        redisCacheImpl.setTtl(cacheName, key, seconds);
+    }
+
+
+    private void publishMessage(int action, String cacheName, Object key) {
+        clearKeysCache(cacheName);
+        JbootEhredisMessage message = new JbootEhredisMessage(clientId, action, cacheName, key);
+        redis.publish(serializer.serialize(channel), serializer.serialize(message));
+    }
+
+    private void clearKeysCache(String cacheName){
+        keysCache.invalidate(cacheName);
+    }
+
     public void onMessage(String channel, Object obj) {
 
         JbootEhredisMessage message = (JbootEhredisMessage) obj;
         /**
          * 不处理自己发送的消息
          */
-        if (uuid.equals(message.getId())) {
+        if (clientId.equals(message.getClientId())) {
             return;
         }
 
+        clearKeysCache(message.getCacheName());
 
         switch (message.getAction()) {
             case JbootEhredisMessage.ACTION_PUT:
-                ehcache.remove(message.getCacheName(), message.getKey());
+                ehcacheImpl.remove(message.getCacheName(), message.getKey());
                 break;
             case JbootEhredisMessage.ACTION_REMOVE:
-                ehcache.remove(message.getCacheName(), message.getKey());
+                ehcacheImpl.remove(message.getCacheName(), message.getKey());
                 break;
             case JbootEhredisMessage.ACTION_REMOVE_ALL:
-                ehcache.removeAll(message.getCacheName());
+                ehcacheImpl.removeAll(message.getCacheName());
                 break;
         }
-
     }
+
+    public JbootEhcacheImpl getEhcacheImpl() {
+        return ehcacheImpl;
+    }
+
+    public JbootRedisCacheImpl getRedisCacheImpl() {
+        return redisCacheImpl;
+    }
+
+
+    @Override
+    public void notifyElementRemoved(Ehcache cache, Element element) throws CacheException {
+    }
+
+    @Override
+    public void notifyElementPut(Ehcache cache, Element element) throws CacheException { }
+
+    @Override
+    public void notifyElementUpdated(Ehcache cache, Element element) throws CacheException {}
+
+    @Override
+    public void notifyElementExpired(Ehcache cache, Element element) {
+        clearKeysCache(cache.getName());
+    }
+
+    @Override
+    public void notifyElementEvicted(Ehcache cache, Element element) {}
+
+    @Override
+    public void notifyRemoveAll(Ehcache cache) {}
+
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        throw new CloneNotSupportedException();
+    }
+
+    @Override
+    public void dispose() {}
 }

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,13 +15,16 @@
  */
 package io.jboot.utils;
 
+import com.jfinal.core.Const;
 import com.jfinal.kit.PathKit;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.net.URLDecoder;
 import java.util.*;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -35,6 +38,118 @@ public class ClassScanner {
 
     public static <T> List<Class<T>> scanSubClass(Class<T> pclazz) {
         return scanSubClass(pclazz, false);
+    }
+
+    private static final Set<String> excludeJars = new HashSet<>();
+
+    static {
+        excludeJars.add("animal-sniffer-annotations-");
+        excludeJars.add("aopalliance-");
+        excludeJars.add("archaius-core-");
+        excludeJars.add("assertj-core-");
+        excludeJars.add("brave-");
+        excludeJars.add("cglib-nodep-");
+        excludeJars.add("commons-");
+        excludeJars.add("consul-api-");
+        excludeJars.add("cos-2017.5.jar");
+        excludeJars.add("druid-");
+        excludeJars.add("ehcache-");
+        excludeJars.add("error_prone_annotations-");
+        excludeJars.add("fastjson-");
+        excludeJars.add("fst-");
+        excludeJars.add("gson-");
+        excludeJars.add("guava-");
+        excludeJars.add("guice-");
+        excludeJars.add("HdrHistogram-");
+        excludeJars.add("HikariCP-");
+        excludeJars.add("httpclient-");
+        excludeJars.add("httpcore-");
+        excludeJars.add("hystrix-");
+        excludeJars.add("j2objc-annotations-");
+        excludeJars.add("jackson-module-afterburner-");
+        excludeJars.add("javapoet-");
+        excludeJars.add("javassist-");
+        excludeJars.add("javax.");
+        excludeJars.add("org.apache.");
+        excludeJars.add("com.sun.");
+        excludeJars.add("jboss-");
+        excludeJars.add("jedis-");
+        excludeJars.add("jfinal-");
+        excludeJars.add("joda-time-");
+        excludeJars.add("jsoup-");
+        excludeJars.add("jsr305-");
+        excludeJars.add("metrics-");
+        excludeJars.add("motan-");
+        excludeJars.add("mysql-connector-java-");
+        excludeJars.add("netty-");
+        excludeJars.add("objenesis-");
+        excludeJars.add("opentracing-");
+        excludeJars.add("profiler-");
+        excludeJars.add("rxjava-");
+        excludeJars.add("sharding-jdbc-core-");
+        excludeJars.add("servlet-");
+        excludeJars.add("shiro-");
+        excludeJars.add("slf4j-");
+        excludeJars.add("spring-");
+        excludeJars.add("undertow-");
+        excludeJars.add("xnio-");
+        excludeJars.add("zipkin-");
+        excludeJars.add("jcommander-");
+        excludeJars.add("jackson-");
+        excludeJars.add("org.eclipse.");
+        excludeJars.add("javax.servlet.jsp-");
+        excludeJars.add("jetty-");
+        excludeJars.add("freemarker-");
+        excludeJars.add("dom4j-");
+        excludeJars.add("amqp-client-");
+        excludeJars.add("ons-client-");
+        excludeJars.add("hamcrest-core-");
+        excludeJars.add("mchange-commons-java-");
+        excludeJars.add("idea_rt.jar");
+        excludeJars.add("MRJToolkit.jar");
+        excludeJars.add("struts-");
+        excludeJars.add("c3p0-");
+        excludeJars.add("junit-");
+        excludeJars.add("javase-");
+        excludeJars.add("antlr-");
+        excludeJars.add("velocity-");
+        excludeJars.add("log4j-");
+        excludeJars.add("dubbo-");
+        excludeJars.add("cron4j-");
+        excludeJars.add("sslext-");
+        excludeJars.add("logback-");
+        excludeJars.add("metrics-");
+        excludeJars.add("jline-");
+        excludeJars.add("zkclient-");
+        excludeJars.add("okhttp-");
+        excludeJars.add("okio-");
+        excludeJars.add("zbus-");
+        excludeJars.add("hessian-");
+        excludeJars.add("groovy-");
+        excludeJars.add("snakeyaml-");
+        excludeJars.add("kryo-");
+        excludeJars.add("reflectasm-");
+        excludeJars.add("asm-");
+        excludeJars.add("minlog-");
+        excludeJars.add("swagger-");
+        excludeJars.add("validation-api-");
+        excludeJars.add("checker-compat-qual-");
+        excludeJars.add("caffeine-");
+        excludeJars.add("j2cache-core-");
+        excludeJars.add("jgroups-");
+        excludeJars.add("snappy-java-");
+        excludeJars.add("resteasy-");
+        excludeJars.add("activation-");
+        excludeJars.add("jcip-annotations-");
+    }
+
+    private static final Set<String> excludeJarPackages = new HashSet<>();
+
+    static {
+        excludeJarPackages.add("com.google");
+        excludeJarPackages.add("oro.oro");
+        excludeJarPackages.add("org.eclipse");
+        excludeJarPackages.add("org.apache");
     }
 
     public static <T> List<Class<T>> scanSubClass(Class<T> pclazz, boolean mustCanNewInstance) {
@@ -78,6 +193,32 @@ public class ClassScanner {
         return list;
     }
 
+    public static List<Class> scanClassByAnnotation(Class annotationClass, boolean mustCanNewInstance) {
+
+        if (appClasses.isEmpty()) {
+            initAppClasses();
+        }
+
+        List<Class> list = new ArrayList<>();
+
+        for (Class clazz : appClasses) {
+            Annotation annotation = clazz.getAnnotation(annotationClass);
+            if (annotation == null) {
+                continue;
+            }
+
+            if (mustCanNewInstance) {
+                if (clazz.isInterface()
+                        || Modifier.isAbstract(clazz.getModifiers())) {
+                    continue;
+                }
+            }
+
+            list.add(clazz);
+        }
+        return list;
+    }
+
 
     /**
      * 开发环境下，用于热加载后重新清空所有的类
@@ -102,11 +243,9 @@ public class ClassScanner {
         for (String path : jars) {
 
             JarFile jarFile = null;
-
             try {
                 jarFile = new JarFile(path);
                 Enumeration<JarEntry> entries = jarFile.entries();
-
                 while (entries.hasMoreElements()) {
                     JarEntry jarEntry = entries.nextElement();
                     String entryName = jarEntry.getName();
@@ -127,7 +266,29 @@ public class ClassScanner {
         }
     }
 
+    private static boolean isExcludeJar(String path) {
+
+        if (!path.toLowerCase().endsWith(".jar")) {
+            return true;
+        }
+
+        for (String exclude : excludeJarPackages) {
+            if (path.contains(exclude.replace(".", File.separator))) {
+                return true;
+            }
+        }
+        for (String exclude : excludeJars) {
+            if (new File(path).getName().startsWith(exclude)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static void initByFilePath(String filePath) {
+
+
         List<File> classFileList = new ArrayList<>();
         scanClassFile(classFileList, filePath);
         for (File file : classFileList) {
@@ -136,7 +297,9 @@ public class ClassScanner {
             int end = file.toString().length() - ".class".length();
 
             String classFile = file.toString().substring(start + 1, end);
-            initAppClasses(classForName(classFile.replace(File.separator, ".")));
+            String className = classFile.replace(File.separator, ".");
+
+            initAppClasses(classForName(className));
         }
     }
 
@@ -154,6 +317,7 @@ public class ClassScanner {
                 String JAVA_HOME = new File(System.getProperty("java.home"), "..").getCanonicalPath();
                 for (URL url : urLs) {
                     String path = url.getPath();
+                    path = URLDecoder.decode(path, Const.DEFAULT_ENCODING);
 
                     // path : /d:/xxx
                     if (path.startsWith("/") && path.indexOf(":") == 2) {
@@ -164,7 +328,7 @@ public class ClassScanner {
                         initByFilePath(new File(path).getCanonicalPath());
                     }
 
-                    if (!path.startsWith(JAVA_HOME)) {
+                    if (!path.startsWith(JAVA_HOME) && !isExcludeJar(path)) {
                         set.add(url.getPath());
                     }
                 }

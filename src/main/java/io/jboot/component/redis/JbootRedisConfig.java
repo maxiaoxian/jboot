@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ *  http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,15 +15,19 @@
  */
 package io.jboot.component.redis;
 
-import io.jboot.config.annotation.PropertieConfig;
+import io.jboot.config.annotation.PropertyConfig;
 import io.jboot.utils.StringUtils;
+import redis.clients.jedis.HostAndPort;
 
-@PropertieConfig(prefix = "jboot.redis")
+import java.util.HashSet;
+import java.util.Set;
+
+@PropertyConfig(prefix = "jboot.redis")
 public class JbootRedisConfig {
 
     private String host;
-    private Integer port;
-    private Integer timeout;
+    private Integer port = 6379;
+    private Integer timeout = 2000;
     private String password;
     private Integer database;
     private String clientName;
@@ -34,7 +38,7 @@ public class JbootRedisConfig {
     private Long minEvictableIdleTimeMillis;
     private Long timeBetweenEvictionRunsMillis;
     private Integer numTestsPerEvictionRun;
-    private String channel;
+    private Integer maxAttempts;
 
 
     public String getHost() {
@@ -141,12 +145,12 @@ public class JbootRedisConfig {
         this.numTestsPerEvictionRun = numTestsPerEvictionRun;
     }
 
-    public String getChannel() {
-        return channel;
+    public Integer getMaxAttempts() {
+        return maxAttempts;
     }
 
-    public void setChannel(String channel) {
-        this.channel = channel;
+    public void setMaxAttempts(Integer maxAttempts) {
+        this.maxAttempts = maxAttempts;
     }
 
     public boolean isCluster() {
@@ -155,5 +159,22 @@ public class JbootRedisConfig {
 
     public boolean isConfigOk() {
         return StringUtils.isNotBlank(host);
+    }
+
+    public boolean isClusterConfig() {
+        return isConfigOk() && host.contains(",");
+    }
+
+    public Set<HostAndPort> getHostAndPorts() {
+        Set<HostAndPort> haps = new HashSet<>();
+        String[] hostAndPortStrings = host.split(",");
+        for (String hostAndPortString : hostAndPortStrings) {
+            String[] hostAndPorts = hostAndPortString.split(":");
+
+            HostAndPort hap = new HostAndPort(hostAndPorts[0], Integer.valueOf(hostAndPorts[1]));
+            haps.add(hap);
+        }
+
+        return haps;
     }
 }

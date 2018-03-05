@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,51 +21,126 @@ import com.jfinal.log.Log;
 import com.netflix.hystrix.contrib.metrics.eventstream.HystrixMetricsStreamServlet;
 import io.jboot.Jboot;
 import io.jboot.component.hystrix.JbootHystrixConfig;
-import io.jboot.component.metrics.JbootHealthCheckServletContextListener;
-import io.jboot.component.metrics.JbootMetricsConfig;
-import io.jboot.component.metrics.JbootMetricsServletContextListener;
+import io.jboot.component.metric.JbootHealthCheckServletContextListener;
+import io.jboot.component.metric.JbootMetricConfig;
+import io.jboot.component.metric.JbootMetricServletContextListener;
+import io.jboot.component.shiro.JbootShiroConfig;
+import io.jboot.server.ContextListeners;
 import io.jboot.server.JbootServer;
 import io.jboot.server.JbootServerConfig;
+import io.jboot.server.JbootServerClassloader;
+import io.jboot.server.listener.JbootAppListenerManager;
 import io.jboot.utils.StringUtils;
+import io.jboot.web.JbootWebConfig;
+import io.jboot.web.websocket.JbootWebsocketManager;
 import io.undertow.Handlers;
 import io.undertow.Undertow;
+import io.undertow.server.DefaultByteBufferPool;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.handlers.PathHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.servlet.Servlets;
 import io.undertow.servlet.api.DeploymentInfo;
 import io.undertow.servlet.api.DeploymentManager;
+import io.undertow.servlet.api.ServletContainer;
+import io.undertow.servlet.api.ServletInfo;
+import io.undertow.websockets.jsr.WebSocketDeploymentInfo;
+import org.apache.shiro.web.env.EnvironmentLoaderListener;
+import org.apache.shiro.web.servlet.ShiroFilter;
 
 import javax.servlet.DispatcherType;
+import javax.servlet.ServletContextListener;
+import java.util.Map;
+import java.util.Set;
 
 
 public class UnderTowServer extends JbootServer {
 
     static Log log = Log.getLog(UnderTowServer.class);
 
-    private DeploymentManager mDeploymentManager;
-    private PathHandler mHandler;
-    private Undertow mServer;
+    private DeploymentManager deploymentManager;
+    private DeploymentInfo deploymentInfo;
+    private PathHandler pathHandler;
+    private Undertow undertow;
+    private ServletContainer servletContainer;
+    private JbootServerConfig config;
+    private JbootWebConfig webConfig;
 
 
-    public UnderTowServer(JbootServerConfig config) {
-        super(config);
-        initUndertowServer();
+    public UnderTowServer() {
+        config = Jboot.config(JbootServerConfig.class);
+        webConfig = Jboot.config(JbootWebConfig.class);
+
     }
 
     public void initUndertowServer() {
+
+
+        JbootServerClassloader classloader = new JbootServerClassloader(UnderTowServer.class.getClassLoader());
+        classloader.setDefaultAssertionStatus(false);
+
+
+        deploymentInfo = buildDeploymentInfo(classloader);
+
+        if (webConfig.isWebsocketEnable()) {
+            Set<Class> endPointClasses = JbootWebsocketManager.me().getWebsocketEndPoints();
+            WebSocketDeploymentInfo webSocketDeploymentInfo = new WebSocketDeploymentInfo();
+            webSocketDeploymentInfo.setBuffers(new DefaultByteBufferPool(true, webConfig.getWebsocketBufferPoolSize()));
+            for (Class endPointClass : endPointClasses) {
+                webSocketDeploymentInfo.addEndpoint(endPointClass);
+            }
+            deploymentInfo.addServletContextAttribute(WebSocketDeploymentInfo.ATTRIBUTE_NAME, webSocketDeploymentInfo);
+        }
+
+        servletContainer = Servlets.newContainer();
+        deploymentManager = servletContainer.addDeployment(deploymentInfo);
+        deploymentManager.deploy();
+
+        HttpHandler httpHandler = null;
+        try {
+            /**
+             * 启动并初始化servlet和filter
+             */
+            httpHandler = deploymentManager.start();
+        } catch (Throwable ex) {
+            ex.printStackTrace();
+        }
+
+
+        pathHandler = Handlers.path(
+                Handlers.resource(new ClassPathResourceManager(classloader, "webRoot")));
+
+        pathHandler.addPrefixPath(config.getContextPath(), httpHandler);
+
+        undertow = Undertow.builder()
+                .addHttpListener(config.getPort(), config.getHost())
+                .setHandler(pathHandler)
+                .build();
+
+    }
+
+    private DeploymentInfo buildDeploymentInfo(JbootServerClassloader classloader) {
         DeploymentInfo deploymentInfo = Servlets.deployment()
-                .setClassLoader(UnderTowServer.class.getClassLoader())
-                .setResourceManager(new ClassPathResourceManager(UnderTowServer.class.getClassLoader()))
-                .setContextPath(getConfig().getContextPath())
-                .setDeploymentName("jboot")
-                .setEagerFilterInit(true); //设置启动的时候，初始化servlet或filter（好吧，跟了很久的源代码...）
+                .setClassLoader(classloader)
+                .setResourceManager(new ClassPathResourceManager(classloader))
+                .setContextPath(config.getContextPath())
+                .setDeploymentName("jboot" + StringUtils.uuid())
+                .setEagerFilterInit(true); //设置启动的时候，初始化servlet或filter
+
+
+        JbootShiroConfig shiroConfig = Jboot.config(JbootShiroConfig.class);
+        if (shiroConfig.isConfigOK()) {
+            deploymentInfo.addListeners(Servlets.listener(EnvironmentLoaderListener.class));
+            deploymentInfo.addFilter(
+                    Servlets.filter("shiro", ShiroFilter.class))
+                    .addFilterUrlMapping("shiro", "/*", DispatcherType.REQUEST);
+        }
 
 
         deploymentInfo.addFilter(
-                Servlets.filter("jboot", JFinalFilter.class)
-                        .addInitParam("configClass", Jboot.getJbootConfig().getJfinalConfig()))
-                .addFilterUrlMapping("jboot", "/*", DispatcherType.REQUEST);
+                Servlets.filter("jfinal", JFinalFilter.class)
+                        .addInitParam("configClass", Jboot.me().getJbootConfig().getJfinalConfig()))
+                .addFilterUrlMapping("jfinal", "/*", DispatcherType.REQUEST);
 
 
         JbootHystrixConfig hystrixConfig = Jboot.config(JbootHystrixConfig.class);
@@ -76,14 +151,30 @@ public class UnderTowServer extends JbootServer {
         }
 
 
-        JbootMetricsConfig metricsConfig = Jboot.config(JbootMetricsConfig.class);
+        JbootMetricConfig metricsConfig = Jboot.config(JbootMetricConfig.class);
         if (StringUtils.isNotBlank(metricsConfig.getUrl())) {
             deploymentInfo.addServlets(
                     Servlets.servlet("MetricsAdminServlet", AdminServlet.class)
                             .addMapping(metricsConfig.getUrl()));
 
-            deploymentInfo.addListeners(Servlets.listener(JbootMetricsServletContextListener.class));
+            deploymentInfo.addListeners(Servlets.listener(JbootMetricServletContextListener.class));
             deploymentInfo.addListeners(Servlets.listener(JbootHealthCheckServletContextListener.class));
+        }
+
+
+        io.jboot.server.Servlets jbootServlets = new io.jboot.server.Servlets();
+        ContextListeners listeners = new ContextListeners();
+
+        JbootAppListenerManager.me().onJbootDeploy(jbootServlets, listeners);
+
+
+        for (Map.Entry<String, io.jboot.server.Servlets.ServletInfo> entry : jbootServlets.getServlets().entrySet()) {
+            ServletInfo servletInfo = Servlets.servlet(entry.getKey(), entry.getValue().getServletClass()).addMappings(entry.getValue().getUrlMapping());
+            deploymentInfo.addServlet(servletInfo);
+        }
+
+        for (Class<? extends ServletContextListener> listenerClass : listeners.getListeners()) {
+            deploymentInfo.addListeners(Servlets.listener(listenerClass));
         }
 
 
@@ -91,48 +182,75 @@ public class UnderTowServer extends JbootServer {
                 Servlets.servlet("JbootResourceServlet", JbootResourceServlet.class)
                         .addMapping("/*"));
 
-        mDeploymentManager = Servlets.defaultContainer().addDeployment(deploymentInfo);
-        mDeploymentManager.deploy();
-
-
-        HttpHandler httpHandler = null;
-        try {
-            /**
-             * 启动并初始化servlet和filter
-             */
-            httpHandler = mDeploymentManager.start();
-        } catch (Throwable ex) {
-            ex.printStackTrace();
-        }
-
-
-        mHandler = Handlers.path(
-                Handlers.resource(new ClassPathResourceManager(UnderTowServer.class.getClassLoader(), "webRoot")))
-                .addPrefixPath(getConfig().getContextPath(), httpHandler);
-
-        mServer = Undertow.builder()
-                .addHttpListener(getConfig().getPort(), getConfig().getHost())
-                .setHandler(mHandler)
-                .build();
+        return deploymentInfo;
     }
+
 
     @Override
     public boolean start() {
         try {
-            mServer.start();
+            initUndertowServer();
+            JbootAppListenerManager.me().onAppStartBefore(this);
+            undertow.start();
         } catch (Throwable ex) {
             log.error(ex.toString(), ex);
             stop();
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public boolean restart() {
+        try {
+            stop();
+            start();
+            System.err.println("undertow restarted!!!");
+        } catch (Throwable ex) {
             return false;
         }
 
         return true;
     }
 
+
     @Override
     public boolean stop() {
-        mServer.stop();
+
+        deploymentManager.undeploy();
+        servletContainer.removeDeployment(deploymentInfo);
+
+        if (pathHandler != null) {
+            pathHandler.clearPaths();
+        }
+        if (undertow != null) {
+            undertow.stop();
+        }
+
         return true;
     }
 
+    public DeploymentManager getDeploymentManager() {
+        return deploymentManager;
+    }
+
+    public DeploymentInfo getDeploymentInfo() {
+        return deploymentInfo;
+    }
+
+    public PathHandler getPathHandler() {
+        return pathHandler;
+    }
+
+    public Undertow getUndertow() {
+        return undertow;
+    }
+
+    public ServletContainer getServletContainer() {
+        return servletContainer;
+    }
+
+    public JbootServerConfig getConfig() {
+        return config;
+    }
 }

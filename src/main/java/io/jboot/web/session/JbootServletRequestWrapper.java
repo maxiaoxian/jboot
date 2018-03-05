@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,16 +16,23 @@
 package io.jboot.web.session;
 
 import io.jboot.Jboot;
+import io.jboot.core.cache.JbootCacheConfig;
+import io.jboot.utils.RequestUtils;
 
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.Part;
+import java.io.IOException;
+import java.util.Collection;
 
 
 public class JbootServletRequestWrapper extends HttpServletRequestWrapper {
 
-    HttpServletRequest originHttpServletRequest;
-    HttpSession httpSession;
+    private HttpServletRequest originHttpServletRequest;
+    private HttpSession httpSession;
+
 
     public JbootServletRequestWrapper(HttpServletRequest request) {
         super(request);
@@ -35,6 +42,7 @@ public class JbootServletRequestWrapper extends HttpServletRequestWrapper {
     @Override
     public HttpSession getSession() {
         return getSession(true);
+
     }
 
 
@@ -42,20 +50,35 @@ public class JbootServletRequestWrapper extends HttpServletRequestWrapper {
     public HttpSession getSession(boolean create) {
 
         if (httpSession == null) {
-            /**
-             * 没有启用缓存的话，就用系统自带的session
-             */
-            if (Jboot.getCache().isNoneCache()) {
-                httpSession = super.getSession(create);
-            } else {
-                httpSession = new JbootHttpSessionWapper();
+
+            JbootCacheConfig cacheConfig = Jboot.config(JbootCacheConfig.class);
+            
+            switch (cacheConfig.getType()) {
+                case JbootCacheConfig.TYPE_REDIS:
+                case JbootCacheConfig.TYPE_EHREDIS:
+                    httpSession = new JbootCacheSessionWapper();
+                    break;
+                case JbootCacheConfig.TYPE_EHCACHE:
+                case JbootCacheConfig.TYPE_NONE_CACHE:
+                    httpSession = new JbootDefaultSessionWapper();
+                    break;
+                default:
+                    httpSession = new JbootDefaultSessionWapper();
+                    break;
+
             }
         }
 
         return httpSession;
-
-
     }
 
+
+    @Override
+    public Collection<Part> getParts() throws IOException, ServletException {
+        if (!RequestUtils.isMultipartRequest(this)) {
+            return null;
+        }
+        return super.getParts();
+    }
 
 }

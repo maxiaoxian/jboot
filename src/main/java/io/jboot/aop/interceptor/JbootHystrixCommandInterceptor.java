@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,67 +16,91 @@
 package io.jboot.aop.interceptor;
 
 
-import com.netflix.hystrix.HystrixCommand;
-import com.netflix.hystrix.HystrixCommandGroupKey;
+import com.jfinal.log.Log;
+import io.jboot.Jboot;
+import io.jboot.component.hystrix.JbootHystrixCommand;
 import io.jboot.component.hystrix.annotation.EnableHystrixCommand;
+import io.jboot.exception.JbootException;
+import io.jboot.utils.StringUtils;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
+
+import java.lang.reflect.Method;
 
 /**
  * 用户Hystrix命令调用，方便Hystrix控制
  */
 public class JbootHystrixCommandInterceptor implements MethodInterceptor {
 
-    EnableHystrixCommand enableHystrixCommand;
+    static Log log = Log.getLog(JbootHystrixCommandInterceptor.class);
 
-    public JbootHystrixCommandInterceptor(EnableHystrixCommand hystrixCommand) {
-        this.enableHystrixCommand = hystrixCommand;
-    }
-
-    public JbootHystrixCommandInterceptor() {
-
-    }
 
     @Override
     public Object invoke(MethodInvocation methodInvocation) throws Throwable {
-        if (enableHystrixCommand == null) {
-            enableHystrixCommand = methodInvocation.getThis().getClass().getAnnotation(EnableHystrixCommand.class);
+
+        EnableHystrixCommand enableHystrixCommand = methodInvocation.getThis().getClass().getAnnotation(EnableHystrixCommand.class);
+        final String faillMethod = enableHystrixCommand.failMethod();
+        final String key = enableHystrixCommand.key();
+        if (StringUtils.isBlank(key)) {
+            throw new JbootException("key must not empty in @EnableHystrixCommand at " + methodInvocation.getThis().getClass().getName() + "." + methodInvocation.getMethod());
         }
 
-        JbootHystrixCommand command = new JbootHystrixCommand(new HystrixRunnable() {
+        return Jboot.hystrix(new JbootHystrixCommand(key) {
             @Override
-            public Object run() {
+            public Object run() throws Exception {
                 try {
                     return methodInvocation.proceed();
                 } catch (Throwable throwable) {
-                    throwable.printStackTrace();
+                    throw (Exception) throwable;
                 }
-                return null;
             }
-        }, enableHystrixCommand.key());
+
+            @Override
+            protected Object getFallback() {
+                if (StringUtils.isBlank(faillMethod)) {
+                    getExecutionException().printStackTrace();
+                    return null;
+                }
 
 
-        return command.execute();
+                Method method = null;
+                try {
+                    method = methodInvocation.getThis().getClass().getMethod(faillMethod, JbootHystrixCommand.class);
+                } catch (NoSuchMethodException ex) {
+                }
+
+                if (method != null) {
+                    try {
+                        method.setAccessible(true);
+                        return method.invoke(methodInvocation.getThis(), this);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                try {
+                    method = methodInvocation.getThis().getClass().getMethod(faillMethod);
+                } catch (NoSuchMethodException e) {
+                    e.printStackTrace();
+                }
+                
+
+                if (method != null) {
+                    try {
+                        method.setAccessible(true);
+                        return method.invoke(methodInvocation.getThis());
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+
+
+                return super.getFallback();
+            }
+        });
+
+
     }
 
 
-    public static class JbootHystrixCommand extends HystrixCommand<Object> {
-
-        private final HystrixRunnable runnable;
-
-        public JbootHystrixCommand(HystrixRunnable runnable, String key) {
-            super(HystrixCommandGroupKey.Factory.asKey(key));
-            this.runnable = runnable;
-        }
-
-        @Override
-        protected Object run() {
-            return runnable.run();
-        }
-    }
-
-
-    public static interface HystrixRunnable {
-        public abstract Object run();
-    }
 }

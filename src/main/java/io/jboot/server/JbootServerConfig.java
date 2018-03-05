@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,13 +15,17 @@
  */
 package io.jboot.server;
 
-import io.jboot.config.annotation.PropertieConfig;
+import io.jboot.config.annotation.PropertyConfig;
 
 
-@PropertieConfig(prefix = "jboot.server")
+@PropertyConfig(prefix = "jboot.server")
 public class JbootServerConfig {
 
-    private String type = "undertow";
+    public static final String TYPE_UNDERTOW = "undertow";
+    public static final String TYPE_TOMCAT = "tomcat";
+    public static final String TYPE_JETTY = "jetty";
+
+    private String type = TYPE_UNDERTOW;
     private String host = "0.0.0.0";
     private int port = 8080;
     private String contextPath = "/";
@@ -59,12 +63,13 @@ public class JbootServerConfig {
         this.contextPath = contextPath;
     }
 
+
     @Override
     public String toString() {
         return "JbootServerConfig {" +
                 "type='" + type + '\'' +
                 ", host='" + host + '\'' +
-                ", port='" + port + '\'' +
+                ", port=" + port +
                 ", contextPath='" + contextPath + '\'' +
                 '}';
     }

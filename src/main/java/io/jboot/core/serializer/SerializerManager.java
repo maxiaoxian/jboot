@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,62 +16,74 @@
 package io.jboot.core.serializer;
 
 import io.jboot.Jboot;
-import io.jboot.JbootConfig;
-import io.jboot.core.spi.JbootSpiManager;
+import io.jboot.core.spi.JbootSpiLoader;
 import io.jboot.exception.JbootAssert;
-import io.jboot.utils.ClassNewer;
+import io.jboot.utils.ClassKits;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 public class SerializerManager {
 
-    public static final String FST2 = "fst2";
-    public static final String FASTJSON = "fastjson";
 
     private static SerializerManager me;
 
+    private static Map<String, ISerializer> serializerMap = new ConcurrentHashMap<>();
+
     public static SerializerManager me() {
         if (me == null) {
-            me = ClassNewer.singleton(SerializerManager.class);
+            me = ClassKits.singleton(SerializerManager.class);
         }
         return me;
     }
 
-    private SerializerManager() {
-
-    }
-
-
-    private ISerializer serializer;
 
     public ISerializer getSerializer() {
+        JbootSerializerConfig config = Jboot.config(JbootSerializerConfig.class);
+        return getSerializer(config.getType());
+    }
+
+    public ISerializer getSerializer(String serializerString) {
+
+        ISerializer serializer = serializerMap.get(serializerString);
 
         if (serializer == null) {
-            serializer = buildSerializer();
+
+            serializer = buildSerializer(serializerString);
+            serializerMap.put(serializerString, serializer);
         }
 
         return serializer;
     }
 
-    private ISerializer buildSerializer() {
-        JbootConfig config = Jboot.getJbootConfig();
+    private ISerializer buildSerializer(String serializerString) {
 
-        JbootAssert.assertTrue(config.getSerializer() != null, "can not get serializer config, please set jboot.serializer value to jboot.proerties");
+        JbootAssert.assertTrue(serializerString != null, "can not get serializer config, please set jboot.serializer value to jboot.proerties");
 
-        if (config.getSerializer() != null && config.getSerializer().contains(".")) {
-            serializer = ClassNewer.newInstance(config.getSerializer());
+        /**
+         * 可能是某个类名
+         */
+        if (serializerString != null && serializerString.contains(".")) {
+
+            ISerializer serializer = ClassKits.newInstance(serializerString);
+
+            if (serializer != null) {
+                return serializer;
+            }
         }
 
-        if (serializer != null) {
-            return serializer;
-        }
 
-        switch (config.getSerializer()) {
-            case FST2:
-                return new Fst2Serializer();
-            case FASTJSON:
+        switch (serializerString) {
+            case JbootSerializerConfig.KRYO:
+                return new KryoSerializer();
+            case JbootSerializerConfig.FST:
+                return new FstSerializer();
+            case JbootSerializerConfig.FASTJSON:
                 return new FastjsonSerializer();
+
             default:
-                return JbootSpiManager.me().spi(ISerializer.class, config.getSerializer());
+                return JbootSpiLoader.load(ISerializer.class, serializerString);
         }
     }
 

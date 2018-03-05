@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,7 @@ package io.jboot.event;
 
 import com.jfinal.log.Log;
 import io.jboot.Jboot;
-import io.jboot.utils.ClassNewer;
+import io.jboot.utils.ClassKits;
 import io.jboot.utils.ClassScanner;
 import io.jboot.event.annotation.EventConfig;
 import io.jboot.utils.ArrayUtils;
@@ -35,9 +35,9 @@ public class JbootEventManager {
 
     private static JbootEventManager manager;
 
-    private JbootEventManager() {
+    public JbootEventManager() {
         threadPool = new ThreadPoolExecutor(0, Integer.MAX_VALUE,
-                60L, TimeUnit.MINUTES,
+                60L, TimeUnit.SECONDS,
                 new SynchronousQueue<Runnable>());
         asyncListenerMap = new ConcurrentHashMap<>();
         listenerMap = new ConcurrentHashMap<>();
@@ -47,7 +47,7 @@ public class JbootEventManager {
 
     public static JbootEventManager me() {
         if (manager == null) {
-            manager = ClassNewer.singleton(JbootEventManager.class);
+            manager = ClassKits.singleton(JbootEventManager.class);
         }
         return manager;
     }
@@ -67,7 +67,7 @@ public class JbootEventManager {
         deleteListner(listenerMap, listenerClass);
         deleteListner(asyncListenerMap, listenerClass);
 
-        if (Jboot.isDevMode()) {
+        if (Jboot.me().isDevMode()) {
             System.out.println(String.format("listener[%s]-->>unRegisterListener.", listenerClass));
         }
 
@@ -109,7 +109,7 @@ public class JbootEventManager {
             return;
         }
 
-        JbootEventListener listener = ClassNewer.newInstance(listenerClass);
+        JbootEventListener listener = ClassKits.newInstance(listenerClass);
         if (listener == null) {
             return;
         }
@@ -145,7 +145,7 @@ public class JbootEventManager {
             }
         }
 
-        if (Jboot.isDevMode()) {
+        if (Jboot.me().isDevMode()) {
             System.out.println(String.format("listener[%s]-->>registered.", listener));
         }
 
@@ -189,7 +189,7 @@ public class JbootEventManager {
     private void invokeListeners(final JbootEvent event, List<JbootEventListener> syncListeners) {
         for (final JbootEventListener listener : syncListeners) {
             try {
-                if (Jboot.isDevMode()) {
+                if (Jboot.me().isDevMode()) {
                     System.out.println(String.format("listener[%s]-->>onEvent(%s)", listener, event));
                 }
                 listener.onEvent(event);
@@ -201,17 +201,14 @@ public class JbootEventManager {
 
     private void invokeListenersAsync(final JbootEvent event, List<JbootEventListener> listeners) {
         for (final JbootEventListener listener : listeners) {
-            threadPool.execute(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        if (Jboot.isDevMode()) {
-                            System.out.println(String.format("listener[%s]-->>onEvent(%s) in async", listener, event));
-                        }
-                        listener.onEvent(event);
-                    } catch (Throwable e) {
-                        log.error(String.format("listener[%s] onEvent is error! ", listener.getClass()), e);
+            threadPool.execute(() -> {
+                try {
+                    if (Jboot.me().isDevMode()) {
+                        System.out.println(String.format("listener[%s]-->>onEvent(%s) in async", listener, event));
                     }
+                    listener.onEvent(event);
+                } catch (Throwable e) {
+                    log.error(String.format("listener[%s] onEvent is error! ", listener.getClass()), e);
                 }
             });
         }

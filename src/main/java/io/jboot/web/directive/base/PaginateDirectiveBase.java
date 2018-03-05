@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,10 +17,10 @@ package io.jboot.web.directive.base;
 
 import com.jfinal.plugin.activerecord.Page;
 import com.jfinal.template.Env;
+import com.jfinal.template.io.Writer;
 import com.jfinal.template.stat.Scope;
-import io.jboot.web.RequestManager;
+import io.jboot.web.JbootRequestContext;
 
-import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,7 +36,7 @@ public abstract class PaginateDirectiveBase extends JbootDirectiveBase {
     private boolean onlyShowPreviousAndNext = false;
 
     @Override
-    public void exec(Env env, Scope scope, Writer writer) {
+    public void onRender(Env env, Scope scope, Writer writer) {
 
         previousClass = getParam("previousClass", "previous", scope);
         nextClass = getParam("nextClass", "next", scope);
@@ -48,7 +48,7 @@ public abstract class PaginateDirectiveBase extends JbootDirectiveBase {
         String previousText = getParam("previousText", "上一页", scope);
         String nextText = getParam("nextText", "下一页", scope);
 
-        Page<?> page = RequestManager.me().getRequestAttr("pageData");
+        Page<?> page = JbootRequestContext.getRequestAttr(getPageAttrName());
 
         int currentPage = page.getPageNumber();
         int totalPage = page.getTotalPage();
@@ -109,8 +109,9 @@ public abstract class PaginateDirectiveBase extends JbootDirectiveBase {
             pages.add(new PaginateDirectiveBase.PaginateItem(nextClass, getUrl(currentPage + 1), nextText));
         }
 
-        scope.setLocal("pages", pages);
-        stat.exec(env, scope, writer);
+        scope.setLocal(getPageItemsName(), pages);
+
+        renderBody(env, scope, writer);
     }
 
 
@@ -131,6 +132,17 @@ public abstract class PaginateDirectiveBase extends JbootDirectiveBase {
     }
 
     protected abstract String getUrl(int pageNumber);
+
+    /**
+     * 获取 page 设置到 requestAttr 里的名字
+     *
+     * @return
+     */
+    protected abstract String getPageAttrName();
+
+    protected String getPageItemsName() {
+        return "pages";
+    }
 
 
     public static class PaginateItem {

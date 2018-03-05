@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,30 +16,56 @@
 package io.jboot.aop;
 
 
-import com.google.inject.*;
+import com.google.inject.Binder;
+import com.google.inject.Guice;
+import com.google.inject.Injector;
+import com.google.inject.TypeLiteral;
 import com.google.inject.matcher.Matchers;
+import com.google.inject.name.Names;
 import com.google.inject.spi.TypeEncounter;
 import com.google.inject.spi.TypeListener;
 import com.jfinal.aop.Before;
-import io.jboot.aop.injector.JbootHystrixInjector;
+import io.jboot.aop.annotation.Bean;
 import io.jboot.aop.injector.JbootrpcMembersInjector;
 import io.jboot.aop.interceptor.JFinalBeforeInterceptor;
 import io.jboot.aop.interceptor.JbootHystrixCommandInterceptor;
-import io.jboot.aop.interceptor.JbootrpcInterceptor;
+import io.jboot.aop.interceptor.cache.JbootCacheEvictInterceptor;
+import io.jboot.aop.interceptor.cache.JbootCacheInterceptor;
+import io.jboot.aop.interceptor.cache.JbootCachePutInterceptor;
+import io.jboot.aop.interceptor.metric.JbootMetricConterAopInterceptor;
+import io.jboot.aop.interceptor.metric.JbootMetricHistogramAopInterceptor;
+import io.jboot.aop.interceptor.metric.JbootMetricMeterAopInterceptor;
+import io.jboot.aop.interceptor.metric.JbootMetricTimerAopInterceptor;
 import io.jboot.component.hystrix.annotation.EnableHystrixCommand;
+import io.jboot.component.metric.annotation.EnableMetricCounter;
+import io.jboot.component.metric.annotation.EnableMetricHistogram;
+import io.jboot.component.metric.annotation.EnableMetricMeter;
+import io.jboot.component.metric.annotation.EnableMetricTimer;
+import io.jboot.core.cache.annotation.CacheEvict;
+import io.jboot.core.cache.annotation.CachePut;
+import io.jboot.core.cache.annotation.Cacheable;
 import io.jboot.core.rpc.annotation.JbootrpcService;
+import io.jboot.server.listener.JbootAppListenerManager;
+import io.jboot.utils.ClassScanner;
+import io.jboot.utils.StringUtils;
 
+import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.util.List;
 
 /**
  * Inject管理器
  */
-public class JbootInjectManager implements Module, TypeListener {
+public class JbootInjectManager implements com.google.inject.Module, TypeListener {
 
-    static JbootInjectManager me = new JbootInjectManager();
+    /**
+     * 这个manager的创建不能来之ClassNewer
+     * 因为 ClassKits 需要 JbootInjectManager，会造成循环调用。
+     */
+    private static JbootInjectManager manager = new JbootInjectManager();
 
     public static JbootInjectManager me() {
-        return me;
+        return manager;
     }
 
 
@@ -62,10 +88,67 @@ public class JbootInjectManager implements Module, TypeListener {
      */
     @Override
     public void configure(Binder binder) {
+
+
+        // 设置 TypeListener
         binder.bindListener(Matchers.any(), this);
-        binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(JbootrpcService.class), new JbootrpcInterceptor());
+
+
+        // 设置 Metrics 相关的统计拦截
+        binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(EnableMetricCounter.class), new JbootMetricConterAopInterceptor());
+        binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(EnableMetricHistogram.class), new JbootMetricHistogramAopInterceptor());
+        binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(EnableMetricMeter.class), new JbootMetricMeterAopInterceptor());
+        binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(EnableMetricTimer.class), new JbootMetricTimerAopInterceptor());
+
+
+        // 设置 hystricx 的拦截器
         binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(EnableHystrixCommand.class), new JbootHystrixCommandInterceptor());
+
+        // 设置 Jfinal AOP 相关的拦截器
         binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(Before.class), new JFinalBeforeInterceptor());
+        binder.bindInterceptor(Matchers.annotatedWith(Before.class), Matchers.any(), new JFinalBeforeInterceptor());
+
+        // 设置缓存相关的拦截器
+        binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(Cacheable.class), new JbootCacheInterceptor());
+        binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(CacheEvict.class), new JbootCacheEvictInterceptor());
+        binder.bindInterceptor(Matchers.any(), Matchers.annotatedWith(CachePut.class), new JbootCachePutInterceptor());
+
+        /**
+         * Bean 注解
+         */
+        beanBind(binder);
+
+        //自定义aop configure
+        JbootAppListenerManager.me().onGuiceConfigure(binder);
+    }
+
+    /**
+     * auto bind interface impl
+     *
+     * @param binder
+     */
+    private void beanBind(Binder binder) {
+
+        List<Class> classes = ClassScanner.scanClassByAnnotation(Bean.class, true);
+        for (Class impl : classes) {
+            Class<?>[] interfaceClasses = impl.getInterfaces();
+            Bean bean = (Bean) impl.getAnnotation(Bean.class);
+            String name = bean.name();
+            for (Class interfaceClass : interfaceClasses) {
+                if (interfaceClass == Serializable.class) {
+                    continue;
+                }
+                try {
+                    if (StringUtils.isBlank(name)) {
+                        binder.bind(interfaceClass).to(impl);
+                    } else {
+                        binder.bind(interfaceClass).annotatedWith(Names.named(name)).to(impl);
+                    }
+                } catch (Throwable ex) {
+                    System.err.println(String.format("can not bind [%s] to [%s]", interfaceClass, impl));
+                }
+            }
+        }
     }
 
     /**
@@ -83,10 +166,6 @@ public class JbootInjectManager implements Module, TypeListener {
         for (Field field : clazz.getDeclaredFields()) {
             if (field.isAnnotationPresent(JbootrpcService.class)) {
                 encounter.register(new JbootrpcMembersInjector(field));
-            }
-
-            if (field.isAnnotationPresent(EnableHystrixCommand.class)) {
-                encounter.register(new JbootHystrixInjector(field));
             }
         }
     }

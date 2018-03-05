@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ *  http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,7 @@
 package io.jboot.server;
 
 import io.jboot.Jboot;
+import io.jboot.server.jetty.JettyServer;
 import io.jboot.server.tomcat.TomcatServer;
 import io.jboot.server.undertow.UnderTowServer;
 
@@ -34,13 +35,16 @@ public class JbootServerFactory {
 
         JbootServerConfig jbootServerConfig = Jboot.config(JbootServerConfig.class);
 
+
         switch (jbootServerConfig.getType()) {
-            case "undertow":
-                return new UnderTowServer(jbootServerConfig);
-            case "tomcat":
-                return new TomcatServer(jbootServerConfig);
+            case JbootServerConfig.TYPE_UNDERTOW:
+                return new UnderTowServer();
+            case JbootServerConfig.TYPE_TOMCAT:
+                return new TomcatServer();
+            case JbootServerConfig.TYPE_JETTY:
+                return new JettyServer();
             default:
-                return new UnderTowServer(jbootServerConfig);
+                return new UnderTowServer();
         }
     }
 

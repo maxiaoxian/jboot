@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ *  http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,7 +24,7 @@ public class JbootEhredisMessage implements Serializable {
     public static final int ACTION_REMOVE = 2;
     public static final int ACTION_REMOVE_ALL = 3;
 
-    private String id;
+    private String clientId;
     private int action;
     private String cacheName;
     private Object key;
@@ -34,19 +34,19 @@ public class JbootEhredisMessage implements Serializable {
 
     }
 
-    public JbootEhredisMessage(String id, int action, String cacheName, Object key) {
-        this.id = id;
+    public JbootEhredisMessage(String clientId, int action, String cacheName, Object key) {
+        this.clientId = clientId;
         this.action = action;
         this.cacheName = cacheName;
         this.key = key;
     }
 
-    public String getId() {
-        return id;
+    public String getClientId() {
+        return clientId;
     }
 
-    public void setId(String id) {
-        this.id = id;
+    public void setClientId(String clientId) {
+        this.clientId = clientId;
     }
 
     public int getAction() {
@@ -72,4 +72,5 @@ public class JbootEhredisMessage implements Serializable {
     public void setKey(Object key) {
         this.key = key;
     }
+
 }

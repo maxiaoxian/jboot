@@ -1,88 +1,79 @@
-import com.jfinal.kit.LogKit;
-import com.jfinal.plugin.activerecord.Db;
-import com.jfinal.plugin.activerecord.Record;
+import com.jfinal.core.Controller;
 import io.jboot.Jboot;
-import io.jboot.component.hystrix.annotation.EnableHystrixCommand;
-import io.jboot.db.dao.JbootDaoBase;
-import io.jboot.db.model.JbootModel;
-import io.jboot.web.controller.JbootController;
+import io.jboot.aop.annotation.Bean;
+import io.jboot.core.cache.annotation.Cacheable;
 import io.jboot.web.controller.annotation.RequestMapping;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import java.util.List;
 
 
 @RequestMapping("/test")
-public class ControllerTest extends JbootController {
+public class ControllerTest extends Controller {
 
 
     public static void main(String[] args) {
 
-        Jboot.setBootArg("jboot.hystrix.url", "/hystrix.stream");
-        Jboot.setBootArg("jboot.cache.type", "redis");
-        Jboot.setBootArg("jboot.cache.redis.host", "127.0.0.1");
+//        Jboot.setBootArg("jboot.hystrix.url", "/hystrix.stream");
+//        Jboot.setBootArg("jboot.cache.type", "redis");
+//        Jboot.setBootArg("jboot.metrics.url", "/metrics.abc");
+//        Jboot.setBootArg("jboot.cache.redis.host", "127.0.0.1");
+
+
         Jboot.run(args);
+
+
+    }
+
+
+    public void json() {
+        setAttr("aaa", "bbb");
+        renderJson();
     }
 
 
     @Inject
-    @EnableHystrixCommand
-    ServiceTest serviceTest;
-
-//    @JbootrpcService
-//    ServiceInter serviceInter;
-
+    ServiceInter serviceTest;
 
     public void index() {
 
-
-
-        List<Record> records = Db.find("select * from `user`");
-
-        System.out.println("index .... ");
-
-        LogKit.error("xxxxxxx");
-
-        Jboot.getCache().put("test","test","valueeeeeeeeee");
-        String value = Jboot.getCache().get("test","test");
-
-        System.out.println("value:"+value);
-
-
-        renderText("hello " + serviceTest.getName());
-
-//        render();
-
-
-
+        renderText("hello" + serviceTest.hello(""));
 
     }
 
 
+    public void directive() {
+        render("/test.html");
+    }
+
+    public void directive1() {
+        render("/test1.html");
+    }
+
+
     @Singleton
-    public static class ServiceTest extends JbootDaoBase {
-
-
-        public String getName() {
-            return "michael";
-        }
+    @Bean
+    public static class ServiceTest implements ServiceInter {
 
 
         @Override
-        public JbootModel findById(Object id) {
+        @Cacheable(name = "aaa", key = "#(\"key:\" + aaa)")
+        public String hello(String aaa) {
+            System.out.println("hello invoked");
+            return "hello " + aaa;
+        }
+
+        @Override
+        public String test1() {
             return null;
-        }
-
-        @Override
-        public boolean deleteById(Object id) {
-            return false;
         }
     }
 
 
     public static interface ServiceInter {
-        public String hello();
+        public String hello(String aaa);
+
+        public String test1();
     }
 
 

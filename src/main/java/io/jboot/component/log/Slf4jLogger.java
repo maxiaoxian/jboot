@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ *  http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,7 @@
 package io.jboot.component.log;
 
 import com.jfinal.log.Log;
+import io.jboot.exception.JbootExceptionHolder;
 import org.slf4j.LoggerFactory;
 import org.slf4j.helpers.NOPLogger;
 
@@ -43,6 +44,7 @@ public class Slf4jLogger extends Log {
 
     @Override
     public void debug(String message, Throwable t) {
+        JbootExceptionHolder.hold(t);
         logger.debug(message, t);
     }
 
@@ -53,6 +55,7 @@ public class Slf4jLogger extends Log {
 
     @Override
     public void info(String message, Throwable t) {
+        JbootExceptionHolder.hold(t);
         logger.info(message, t);
     }
 
@@ -63,6 +66,7 @@ public class Slf4jLogger extends Log {
 
     @Override
     public void warn(String message, Throwable t) {
+        JbootExceptionHolder.hold(t);
         logger.warn(message, t);
     }
 
@@ -73,6 +77,7 @@ public class Slf4jLogger extends Log {
 
     @Override
     public void error(String message, Throwable t) {
+        JbootExceptionHolder.hold(t);
         logger.error(message, t);
     }
 
@@ -83,6 +88,7 @@ public class Slf4jLogger extends Log {
 
     @Override
     public void fatal(String message, Throwable t) {
+        JbootExceptionHolder.hold(t);
         logger.error(message, t);
     }
 

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ *  http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,8 +17,9 @@ package io.jboot.core.http;
 
 import io.jboot.Jboot;
 import io.jboot.core.http.jboot.JbootHttpImpl;
-import io.jboot.core.spi.JbootSpiManager;
-import io.jboot.utils.ClassNewer;
+import io.jboot.core.http.okhttp.OKHttpImpl;
+import io.jboot.core.spi.JbootSpiLoader;
+import io.jboot.utils.ClassKits;
 
 public class JbootHttpManager {
 
@@ -27,7 +28,7 @@ public class JbootHttpManager {
 
     public static JbootHttpManager me() {
         if (manager == null) {
-            manager = ClassNewer.singleton(JbootHttpManager.class);
+            manager = ClassKits.singleton(JbootHttpManager.class);
         }
         return manager;
     }
@@ -49,11 +50,12 @@ public class JbootHttpManager {
         switch (config.getType()) {
             case JbootHttpConfig.TYPE_DEFAULT:
                 return new JbootHttpImpl();
-            case JbootHttpConfig.TYPE_HTTPCLIENT:
             case JbootHttpConfig.TYPE_OKHTTP:
+                return new OKHttpImpl();
+            case JbootHttpConfig.TYPE_HTTPCLIENT:
                 throw new RuntimeException("not finished!!!!");
             default:
-                return JbootSpiManager.me().spi(JbootHttp.class, config.getType());
+                return JbootSpiLoader.load(JbootHttp.class, config.getType());
         }
 
     }

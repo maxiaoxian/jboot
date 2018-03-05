@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ *  http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,6 +30,9 @@ public class JbootHttpRequest {
     public static final int CONNECT_TIME_OUT = 1000 * 5; // 5秒
     public static final String CHAR_SET = "UTF-8";
 
+    public static final String CONTENT_TYPE_JSON = "application/json; charset=utf-8";
+    public static final String CONTENT_TYPE_URL_ENCODED = "application/x-www-form-urlencoded;charset=utf-8";
+
     Map<String, String> headers;
     Map<String, Object> params;
 
@@ -45,6 +48,7 @@ public class JbootHttpRequest {
     private boolean multipartFormData = false;
 
     private File downloadFile;
+    private String contentType = CONTENT_TYPE_URL_ENCODED;
 
 
     public static JbootHttpRequest create(String url) {
@@ -82,7 +86,26 @@ public class JbootHttpRequest {
         if (params == null) {
             params = new HashMap<>();
         }
+        if (value instanceof File) {
+            setMultipartFormData(true);
+        }
         params.put(key, value);
+    }
+
+    public void addParams(Map<String, Object> map) {
+        if (params == null) {
+            params = new HashMap<>();
+        }
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            if (entry.getValue() instanceof File) {
+                setMultipartFormData(true);
+            }
+
+            params.put(entry.getKey(), entry.getValue());
+        }
     }
 
     public void setRequestUrl(String requestUrl) {
@@ -154,6 +177,17 @@ public class JbootHttpRequest {
     }
 
     public void setParams(Map<String, Object> params) {
+        if (params == null) {
+            return;
+        }
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            if (entry.getValue() instanceof File) {
+                setMultipartFormData(true);
+            }
+        }
         this.params = params;
     }
 
@@ -162,7 +196,7 @@ public class JbootHttpRequest {
     }
 
     public boolean isPostRquest() {
-        return METHOD_GET.equalsIgnoreCase(method);
+        return METHOD_POST.equalsIgnoreCase(method);
     }
 
     public String getCharset() {
@@ -187,5 +221,13 @@ public class JbootHttpRequest {
 
     public void setDownloadFile(File downloadFile) {
         this.downloadFile = downloadFile;
+    }
+
+    public String getContentType() {
+        return contentType;
+    }
+
+    public void setContentType(String contentType) {
+        this.contentType = contentType;
     }
 }

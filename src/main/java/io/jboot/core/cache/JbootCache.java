@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,6 +22,12 @@ import java.util.List;
 
 public interface JbootCache extends com.jfinal.plugin.activerecord.cache.ICache {
 
+    public <T> T get(String cacheName, Object key);
+
+    public void put(String cacheName, Object key, Object value);
+
+    public void put(String cacheName, Object key, Object value, int liveSeconds);
+
     public List getKeys(String cacheName);
 
     public void remove(String cacheName, Object key);
@@ -30,5 +36,10 @@ public interface JbootCache extends com.jfinal.plugin.activerecord.cache.ICache 
 
     public <T> T get(String cacheName, Object key, IDataLoader dataLoader);
 
-    public boolean isNoneCache();
+    public <T> T get(String cacheName, Object key, IDataLoader dataLoader, int liveSeconds);
+
+    public Integer getTtl(String cacheName, Object key);
+
+    public void setTtl(String cacheName, Object key, int seconds);
+
 }

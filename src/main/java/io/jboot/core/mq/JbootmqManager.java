@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,22 +17,21 @@ package io.jboot.core.mq;
 
 import io.jboot.Jboot;
 import io.jboot.core.mq.aliyunmq.JbootAliyunmqImpl;
+import io.jboot.core.mq.qpidmq.JbootQpidmqImpl;
 import io.jboot.core.mq.rabbitmq.JbootRabbitmqImpl;
 import io.jboot.core.mq.redismq.JbootRedismqImpl;
-import io.jboot.core.spi.JbootSpiManager;
-import io.jboot.utils.ClassNewer;
+import io.jboot.core.mq.zbus.JbootZbusmqImpl;
+import io.jboot.core.spi.JbootSpiLoader;
+import io.jboot.utils.ClassKits;
 
 
 public class JbootmqManager {
 
     private static JbootmqManager manager;
 
-    private JbootmqManager() {
-    }
-
     public static JbootmqManager me() {
         if (manager == null) {
-            manager = ClassNewer.singleton(JbootmqManager.class);
+            manager = ClassKits.singleton(JbootmqManager.class);
         }
         return manager;
     }
@@ -42,13 +41,20 @@ public class JbootmqManager {
 
     public Jbootmq getJbootmq() {
         if (jbootmq == null) {
-            jbootmq = buildJbootmq();
+            JbootmqConfig config = Jboot.config(JbootmqConfig.class);
+            jbootmq = getJbootmq(config);
         }
         return jbootmq;
     }
 
-    private Jbootmq buildJbootmq() {
-        JbootmqConfig config = Jboot.config(JbootmqConfig.class);
+    public Jbootmq getJbootmq(JbootmqConfig config) {
+        return buildJbootmq(config);
+    }
+
+    private Jbootmq buildJbootmq(JbootmqConfig config) {
+        if (config == null) {
+            throw new IllegalArgumentException("config must not be null");
+        }
 
         switch (config.getType()) {
             case JbootmqConfig.TYPE_REDIS:
@@ -57,11 +63,14 @@ public class JbootmqManager {
                 return new JbootAliyunmqImpl();
             case JbootmqConfig.TYPE_RABBITMQ:
                 return new JbootRabbitmqImpl();
+            case JbootmqConfig.TYPE_ZBUS:
+                return new JbootZbusmqImpl();
+            case JbootmqConfig.TYPE_QPID:
+                return new JbootQpidmqImpl();
             case JbootmqConfig.TYPE_ACTIVEMQ:
-            case JbootmqConfig.TYPE_HORNETQ:
                 throw new RuntimeException("not finished!!!!");
             default:
-                return JbootSpiManager.me().spi(Jbootmq.class, config.getType());
+                return JbootSpiLoader.load(Jbootmq.class, config.getType());
         }
 
     }

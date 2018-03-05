@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,10 +15,12 @@
  */
 package io.jboot.core.http.jboot;
 
-import io.jboot.exception.JbootException;
+import com.jfinal.log.Log;
+import io.jboot.core.http.JbootHttpBase;
 import io.jboot.core.http.JbootHttpRequest;
 import io.jboot.core.http.JbootHttpResponse;
-import io.jboot.core.http.JbootHttp;
+import io.jboot.exception.JbootException;
+import io.jboot.utils.ArrayUtils;
 import io.jboot.utils.StringUtils;
 
 import javax.net.ssl.*;
@@ -26,14 +28,15 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.ProtocolException;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.Map;
 
 
-public class JbootHttpImpl implements JbootHttp {
+public class JbootHttpImpl extends JbootHttpBase {
+
+    private static final Log LOG = Log.getLog(JbootHttpImpl.class);
 
 
     @Override
@@ -57,14 +60,9 @@ public class JbootHttpImpl implements JbootHttp {
 
 
             if (request.isGetRquest()) {
+
                 connection.setInstanceFollowRedirects(true);
                 connection.connect();
-
-                if (connection.getResponseCode() >= 400) {
-                    stream = connection.getErrorStream();
-                } else {
-                    stream = connection.getInputStream();
-                }
             }
             /**
              * 处理 post请求
@@ -74,7 +72,11 @@ public class JbootHttpImpl implements JbootHttp {
                 connection.setRequestMethod("POST");
                 connection.setDoOutput(true);
 
+                /**
+                 * 处理 非文件上传的 post 请求
+                 */
                 if (!request.isMultipartFormData()) {
+
                     String postContent = buildParams(request);
                     if (StringUtils.isNotEmpty(postContent)) {
                         DataOutputStream dos = new DataOutputStream(connection.getOutputStream());
@@ -82,46 +84,22 @@ public class JbootHttpImpl implements JbootHttp {
                         dos.flush();
                         dos.close();
                     }
-                    stream = connection.getInputStream();
+
                 }
 
                 /**
-                 * 处理文件上传
+                 * 处理文件上传的post请求
                  */
                 else {
 
-                    if (request.getParams() != null && request.getParams().size() > 0) {
-                        String endFlag = "\r\n";
-                        String boundary = "---------" + StringUtils.uuid();
-                        connection.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
-                        DataOutputStream dos = new DataOutputStream(connection.getOutputStream());
-                        for (Map.Entry<String, Object> entry : request.getParams().entrySet()) {
-                            if (entry.getValue() instanceof File) {
-                                File file = (File) entry.getValue();
-                                checkFileNormal(file);
-                                dos.writeBytes(boundary + endFlag);
-                                dos.writeBytes(String.format("Content-Disposition: form-data; name=\"%s\"; filename=\"%s\"", entry.getKey(), file.getName()) + endFlag);
-                                dos.writeBytes(endFlag);
-                                FileInputStream fStream = new FileInputStream(file);
-                                byte[] buffer = new byte[2028];
-                                for (int len = 0; (len = fStream.read(buffer)) > 0; ) {
-                                    dos.write(buffer, 0, len);
-                                }
-
-                                dos.writeBytes(endFlag);
-                            } else {
-                                dos.writeBytes("Content-Disposition: form-data; name=\"" + entry.getKey() + "\"");
-                                dos.writeBytes(endFlag);
-                                dos.writeBytes(endFlag);
-                                dos.writeBytes(String.valueOf(entry.getValue()));
-                                dos.writeBytes(endFlag);
-                            }
-                        }
-
-                        dos.writeBytes("--" + boundary + "--" + endFlag);
+                    if (ArrayUtils.isNotEmpty(request.getParams())) {
+                        uploadData(request, connection);
                     }
+
                 }
             }
+
+            stream = getInutStream(connection);
 
             response.setContentType(connection.getContentType());
             response.setResponseCode(connection.getResponseCode());
@@ -130,8 +108,8 @@ public class JbootHttpImpl implements JbootHttp {
             response.pipe(stream);
             response.finish();
 
-
         } catch (Throwable ex) {
+            LOG.warn(ex.toString(), ex);
             response.setError(ex);
         } finally {
             if (connection != null) {
@@ -147,6 +125,41 @@ public class JbootHttpImpl implements JbootHttp {
         }
     }
 
+    private InputStream getInutStream(HttpURLConnection connection) throws IOException {
+        return connection.getResponseCode() >= 400 ? connection.getErrorStream() : connection.getInputStream();
+    }
+
+    private void uploadData(JbootHttpRequest request, HttpURLConnection connection) throws IOException {
+        String endFlag = "\r\n";
+        String boundary = "---------" + StringUtils.uuid();
+        connection.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
+        DataOutputStream dos = new DataOutputStream(connection.getOutputStream());
+        for (Map.Entry entry : request.getParams().entrySet()) {
+            if (entry.getValue() instanceof File) {
+                File file = (File) entry.getValue();
+                checkFileNormal(file);
+                dos.writeBytes(boundary + endFlag);
+                dos.writeBytes(String.format("Content-Disposition: form-data; name=\"%s\"; filename=\"%s\"", entry.getKey(), file.getName()) + endFlag);
+                dos.writeBytes(endFlag);
+                FileInputStream fStream = new FileInputStream(file);
+                byte[] buffer = new byte[2028];
+                for (int len = 0; (len = fStream.read(buffer)) > 0; ) {
+                    dos.write(buffer, 0, len);
+                }
+
+                dos.writeBytes(endFlag);
+            } else {
+                dos.writeBytes("Content-Disposition: form-data; name=\"" + entry.getKey() + "\"");
+                dos.writeBytes(endFlag);
+                dos.writeBytes(endFlag);
+                dos.writeBytes(String.valueOf(entry.getValue()));
+                dos.writeBytes(endFlag);
+            }
+        }
+
+        dos.writeBytes("--" + boundary + "--" + endFlag);
+    }
+
     private static void checkFileNormal(File file) {
         if (!file.exists()) {
             throw new JbootException("file not exists!!!!" + file);
@@ -157,27 +170,6 @@ public class JbootHttpImpl implements JbootHttp {
         if (!file.canRead()) {
             throw new JbootException("cannnot read file!!!" + file);
         }
-    }
-
-
-    public static String buildParams(JbootHttpRequest request) throws UnsupportedEncodingException {
-        Map<String, Object> params = request.getParams();
-        if (params == null || params.isEmpty()) {
-            return null;
-        }
-
-        StringBuilder builder = new StringBuilder();
-        for (Map.Entry<String, ? extends Object> entry : params.entrySet()) {
-            if (entry.getKey() != null && StringUtils.isNotBlank(entry.getValue()))
-                builder.append(entry.getKey().trim()).append("=")
-                        .append(URLEncoder.encode(entry.getValue().toString(), request.getCharset())).append("&");
-        }
-
-        if (builder.charAt(builder.length() - 1) == '&') {
-            builder.deleteCharAt(builder.length() - 1);
-        }
-
-        return builder.toString();
     }
 
 
@@ -200,6 +192,9 @@ public class JbootHttpImpl implements JbootHttp {
 
     private static HttpURLConnection getConnection(JbootHttpRequest request) {
         try {
+            if (request.isGetRquest()) {
+                buildGetUrlWithParams(request);
+            }
             if (request.getRequestUrl().toLowerCase().startsWith("https")) {
                 return getHttpsConnection(request);
             } else {
@@ -221,20 +216,28 @@ public class JbootHttpImpl implements JbootHttp {
         HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
 
         if (request.getCertPath() != null && request.getCertPass() != null) {
+
             KeyStore clientStore = KeyStore.getInstance("PKCS12");
             clientStore.load(new FileInputStream(request.getCertPath()), request.getCertPass().toCharArray());
-            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(clientStore, request.getCertPass().toCharArray());
-            KeyManager[] kms = kmf.getKeyManagers();
+
+            KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            keyManagerFactory.init(clientStore, request.getCertPass().toCharArray());
+            KeyManager[] keyManagers = keyManagerFactory.getKeyManagers();
+
+
+            TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            trustManagerFactory.init(clientStore);
+
             SSLContext sslContext = SSLContext.getInstance("TLSv1");
-            sslContext.init(kms, null, new SecureRandom());
+            sslContext.init(keyManagers, trustManagerFactory.getTrustManagers(), new SecureRandom());
+
             conn.setSSLSocketFactory(sslContext.getSocketFactory());
 
         } else {
             conn.setHostnameVerifier(hnv);
             SSLContext sslContext = SSLContext.getInstance("SSL", "SunJSSE");
             if (sslContext != null) {
-                TrustManager[] tm = {xtm};
+                TrustManager[] tm = {trustAnyTrustManager};
                 sslContext.init(null, tm, null);
                 SSLSocketFactory ssf = sslContext.getSocketFactory();
                 conn.setSSLSocketFactory(ssf);
@@ -243,7 +246,7 @@ public class JbootHttpImpl implements JbootHttp {
         return conn;
     }
 
-    private static X509TrustManager xtm = new X509TrustManager() {
+    private static X509TrustManager trustAnyTrustManager = new X509TrustManager() {
         public void checkClientTrusted(X509Certificate[] chain, String authType) {
         }
 

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ *  http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,17 +18,18 @@ package io.jboot.server.tomcat;
 
 import io.jboot.exception.JbootException;
 import io.jboot.server.JbootServer;
-import io.jboot.server.JbootServerConfig;
 
 public class TomcatServer extends JbootServer {
 
-    public TomcatServer(JbootServerConfig config) {
-        super(config);
-    }
 
     @Override
     public boolean start() {
         new JbootException("tomcat server not finish!!!");
+        return false;
+    }
+
+    @Override
+    public boolean restart() {
         return false;
     }
 

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,19 +15,27 @@
  */
 package io.jboot.db.model;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Column 的工具类，用于方便组装sql
  */
-public class Columns {
+public class Columns implements Serializable {
 
     private List<Column> cols = new ArrayList<>();
 
 
     public static Columns create() {
         return new Columns();
+    }
+
+    public static Columns create(Column column) {
+        Columns that = new Columns();
+        that.cols.add(column);
+        return that;
+
     }
 
     public static Columns create(String name, Object value) {
@@ -121,11 +129,8 @@ public class Columns {
     }
 
 
-    public List<Column> getCols() {
+    public List<Column> getList() {
         return cols;
     }
 
-    public void setCols(List<Column> cols) {
-        this.cols = cols;
-    }
 }

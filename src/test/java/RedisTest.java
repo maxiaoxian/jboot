@@ -1,7 +1,3 @@
-import io.jboot.Jboot;
-import io.jboot.component.redis.JbootRedis;
-import io.jboot.core.mq.Jbootmq;
-import io.jboot.core.mq.JbootmqMessageListener;
 import org.junit.Test;
 
 
@@ -10,25 +6,30 @@ public class RedisTest {
     @Test
     public void testRedis() {
 
-        JbootRedis redis = Jboot.getRedis();
-        redis.set("mykey","myvalue");
-
-
-        // 发布消息？
-        redis.publish("myChannel","myData...");
-
-
-        Jbootmq mq = Jboot.getMq();
-
-        mq.addMessageListener(new JbootmqMessageListener() {
-            @Override
-            public void onMessage(String channel, Object message) {
-                System.out.println("get message :  " + message);
-            }
-        });
-
-        mq.publish("mesage data...","mqChannel");
-
+//        User user = new User();
+//        user.setId(22);
+//        user.setName("张三历史");
+//
+//        Jboot.setBootArg("jboot.redis.host", "127.0.0.1");
+////        Jboot.setBootArg("jboot.redis.password", "123456");
+//
+//        JbootRedis redis = Jboot.me().getRedis();
+//        redis.set("mykey", "");
+//
+//        redis.set("user",user);
+//
+//        redis.lpush("list", 1,2,3,4,5,6);
+//
+//        System.out.println(redis.get("mykey").toString());
+//
+//        System.out.println(redis.lrange("list", 0, -1).size());
+//
+//        System.out.println(redis.blpop(10000, "list"));
+//
+//
+//        User redisUser = redis.get("user");
+//        System.out.println(redisUser.getId());
+//        System.out.println(redisUser.getName());
 
 
     }

@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,10 +15,10 @@
  */
 package io.jboot.core.mq.rabbitmq;
 
-import io.jboot.config.annotation.PropertieConfig;
+import io.jboot.config.annotation.PropertyConfig;
 
 
-@PropertieConfig(prefix = "jboot.mq.rabbitmq")
+@PropertyConfig(prefix = "jboot.mq.rabbitmq")
 public class JbootmqRabbitmqConfig {
 
 
@@ -28,7 +28,6 @@ public class JbootmqRabbitmqConfig {
     private String host = "127.0.0.1";
     private String port = "5672";
     private String virtualHost;
-    private String channel;
 
 
     public String getUsername() {
@@ -75,11 +74,4 @@ public class JbootmqRabbitmqConfig {
         this.virtualHost = virtualHost;
     }
 
-    public String getChannel() {
-        return channel;
-    }
-
-    public void setChannel(String channel) {
-        this.channel = channel;
-    }
 }

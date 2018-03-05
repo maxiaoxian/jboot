@@ -1,11 +1,11 @@
 /**
- * Copyright (c) 2015-2017, Michael Yang 杨福海 (fuhai999@gmail.com).
+ * Copyright (c) 2015-2018, Michael Yang 杨福海 (fuhai999@gmail.com).
  * <p>
- * Licensed under the GNU Lesser General Public License (LGPL) ,Version 3.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  * <p>
- * http://www.gnu.org/licenses/lgpl-3.0.txt
+ * http://www.apache.org/licenses/LICENSE-2.0
  * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,6 +18,8 @@ package io.jboot.aop.interceptor;
 
 import com.jfinal.aop.Interceptor;
 import com.jfinal.aop.InterceptorManager;
+import com.jfinal.core.Controller;
+import io.jboot.utils.ClassKits;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 
@@ -34,6 +36,13 @@ public class JFinalBeforeInterceptor implements MethodInterceptor {
     public Object invoke(MethodInvocation methodInvocation) throws Throwable {
 
         Class targetClass = methodInvocation.getThis().getClass();
+
+        //过滤掉controller，因为controller由action去执行@Before相关注解了
+        if (Controller.class.isAssignableFrom(targetClass)) {
+            return methodInvocation.proceed();
+        }
+
+        targetClass = ClassKits.getUsefulClass(targetClass);
         Method method = methodInvocation.getMethod();
 
         Interceptor[] finalInters = manger.buildServiceMethodInterceptor(InterceptorManager.NULL_INTERS, targetClass, method);
@@ -41,4 +50,5 @@ public class JFinalBeforeInterceptor implements MethodInterceptor {
         invocation.invoke();
         return invocation.getReturnValue();
     }
+
 }
